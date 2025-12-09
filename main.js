@@ -393,49 +393,16 @@ class Game {
             
             e.preventDefault();
             
-            // Ctrl+Scroll: Adjust brush/eraser size
+            // Check if Ctrl is held - adjust brush/eraser size instead of element selection
             if (e.ctrlKey || e.metaKey) {
+                // Only adjust size for brush or eraser tools
                 if (this.activeTool === 'brush' || this.activeTool === 'eraser') {
-                    const isEraser = this.activeTool === 'eraser';
-                    const currentSize = isEraser ? this.eraserSize : this.brushSize;
-                    const minSize = 1;
-                    const maxSize = 50;
-                    
-                    // Scroll up = increase size, scroll down = decrease size
-                    let newSize;
-                    if (e.deltaY < 0) {
-                        newSize = Math.min(maxSize, currentSize + 1);
-                    } else {
-                        newSize = Math.max(minSize, currentSize - 1);
-                    }
-                    
-                    // Update size
-                    if (isEraser) {
-                        this.eraserSize = newSize;
-                        const slider = document.getElementById('eraser-size');
-                        if (slider) slider.value = newSize;
-                        const label = document.getElementById('eraser-size-label');
-                        if (label) label.textContent = newSize;
-                    } else {
-                        this.brushSize = newSize;
-                        const slider = document.getElementById('brush-size');
-                        if (slider) slider.value = newSize;
-                        const label = document.getElementById('brush-size-label');
-                        if (label) label.textContent = newSize;
-                    }
-                    
-                    // Update cursor visuals
-                    this.updateCursorVisuals();
-                    
-                    // Update status pill (same as bracket shortcuts)
-                    if (this.lastMouseEvent) {
-                        this.updateStatusPill(this.lastMouseEvent);
-                    }
+                    const scrollDirection = e.deltaY < 0 ? 1 : -1;
+                    this.adjustSize(scrollDirection);
                 }
-                return; // Don't cycle elements when Ctrl is held
+                return;
             }
             
-            // Normal scroll: Cycle through elements
             // Get current element index
             const currentIndex = this.elementOrder.indexOf(this.activeElement);
             if (currentIndex === -1) return;
@@ -2386,8 +2353,7 @@ class Game {
             ? [downRight, downLeft] 
             : [downLeft, downRight];
 
-        for (let idx = 0; idx < diagonals.length; idx++) {
-            const diagonalIndex = diagonals[idx];
+        for (const diagonalIndex of diagonals) {
             if (diagonalIndex === -1) continue;
             
             const targetType = this.cells[diagonalIndex];
@@ -2399,14 +2365,8 @@ class Game {
                            (targetState === STATE.LIQUID && this.LUT_DENSITY[targetType] < myDensity);
             
             if (canSlip) {
-                // Check diagonal blocking: particle can only move diagonally if
-                // at least one of the two adjacent orthogonal cells is passable
-                const isDiagonalBlocked = this.isDiagonalBlocked(particleIndex, diagonalIndex);
-                
-                if (!isDiagonalBlocked) {
-                    this.swap(particleIndex, diagonalIndex);
-                    return true;
-                }
+                this.swap(particleIndex, diagonalIndex);
+                return true;
             }
         }
         
@@ -2436,34 +2396,6 @@ class Game {
         // Last resort: vertical swap
         this.swap(particleIndex, belowIndex);
         return true;
-    }
-
-
-    isDiagonalBlocked(fromIndex, toIndex) {
-        // Check if diagonal movement is blocked by solid walls
-        // Diagonal movement requires at least one adjacent orthogonal cell to be passable
-        
-        // Calculate positions
-        const fromX = fromIndex % this.gridWidth;
-        const fromY = Math.floor(fromIndex / this.gridWidth);
-        const toX = toIndex % this.gridWidth;
-        const toY = Math.floor(toIndex / this.gridWidth);
-        
-        // Get the two orthogonal cells adjacent to the diagonal move
-        const sideIndex = this.getIdx(toX, fromY); // Horizontal neighbor
-        const belowIndex = this.getIdx(fromX, toY); // Vertical neighbor
-        
-        // Check if both orthogonal neighbors are solid/static (blocking)
-        const sideBlocked = sideIndex !== -1 && 
-            (this.LUT_STATE[this.cells[sideIndex]] === STATE.SOLID || 
-             this.LUT_STATE[this.cells[sideIndex]] === STATE.STATIC);
-        
-        const belowBlocked = belowIndex !== -1 && 
-            (this.LUT_STATE[this.cells[belowIndex]] === STATE.SOLID || 
-             this.LUT_STATE[this.cells[belowIndex]] === STATE.STATIC);
-        
-        // Diagonal is blocked if BOTH orthogonal neighbors are solid
-        return sideBlocked && belowBlocked;
     }
 
 
@@ -2874,11 +2806,8 @@ class Game {
             const t1State = this.LUT_STATE[t1];
             if (t1State === STATE.AIR || t1State === STATE.FIRE || 
                 (t1State === STATE.LIQUID && this.LUT_DENSITY[t1] < density)) {
-                // Check diagonal blocking before moving
-                if (!this.isDiagonalBlocked(i, r1)) {
-                    this.swap(i, r1);
-                    return;
-                }
+                this.swap(i, r1);
+                return;
             }
         }
         if (r2 !== -1) {
@@ -2886,11 +2815,8 @@ class Game {
             const t2State = this.LUT_STATE[t2];
             if (t2State === STATE.AIR || t2State === STATE.FIRE || 
                 (t2State === STATE.LIQUID && this.LUT_DENSITY[t2] < density)) {
-                // Check diagonal blocking before moving
-                if (!this.isDiagonalBlocked(i, r2)) {
-                    this.swap(i, r2);
-                    return;
-                }
+                this.swap(i, r2);
+                return;
             }
         }
         
@@ -3080,22 +3006,16 @@ class Game {
         if (downLeft !== -1) {
             const dlType = this.cells[downLeft];
             if (dlType === TYPE.EMPTY || dlType === TYPE.FIRE) {
-                // Check diagonal blocking before moving
-                if (!this.isDiagonalBlocked(i, downLeft)) {
-                    this.swap(i, downLeft);
-                    return;
-                }
+                this.swap(i, downLeft);
+                return;
             }
         }
         
         if (downRight !== -1) {
             const drType = this.cells[downRight];
             if (drType === TYPE.EMPTY || drType === TYPE.FIRE) {
-                // Check diagonal blocking before moving
-                if (!this.isDiagonalBlocked(i, downRight)) {
-                    this.swap(i, downRight);
-                    return;
-                }
+                this.swap(i, downRight);
+                return;
             }
         }
         
@@ -3927,60 +3847,74 @@ class Game {
     
     
     drawLine(x0, y0, x1, y1) {
-        // Improved line drawing with guaranteed no gaps
-        // Sample points along the line at intervals smaller than brush size
-        const size = this.activeTool === 'brush' ? this.brushSize : this.eraserSize;
+        // Bresenham's line algorithm for smooth drawing
+        const dx = Math.abs(x1 - x0);
+        const dy = Math.abs(y1 - y0);
+        const sx = x0 < x1 ? 1 : -1;
+        const sy = y0 < y1 ? 1 : -1;
+        let err = dx - dy;
         
-        const dx = x1 - x0;
-        const dy = y1 - y0;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        // If distance is very small, just draw once
-        if (distance < 0.1) {
-            this.interact(x0, y0, size);
-            return;
-        }
-        
-        // Calculate number of steps: ensure spacing is less than half the brush size
-        // This guarantees overlap and no gaps
-        const spacing = Math.max(0.5, size * 0.4); // 40% of brush size for good overlap
-        const steps = Math.ceil(distance / spacing);
-        
-        // Draw points along the line
-        for (let i = 0; i <= steps; i++) {
-            const t = i / steps;
-            const x = Math.round(x0 + dx * t);
-            const y = Math.round(y0 + dy * t);
-            this.interact(x, y, size);
+        while (true) {
+            this.interact(x0, y0, this.activeTool === 'brush' ? this.brushSize : this.eraserSize);
+            
+            if (x0 === x1 && y0 === y1) break;
+            
+            const e2 = 2 * err;
+            if (e2 > -dy) {
+                err -= dy;
+                x0 += sx;
+            }
+            if (e2 < dx) {
+                err += dx;
+                y0 += sy;
+            }
         }
     }
     
     
     drawLineWithInterpolatedSize(x0, y0, size0, x1, y1, size1) {
         // Draw line with gradually changing size (like Photoshop shift-click)
-        // Improved version with guaranteed no gaps
-        const dx = x1 - x0;
-        const dy = y1 - y0;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+        // Uses Bresenham's algorithm with size interpolation
+        const dx = Math.abs(x1 - x0);
+        const dy = Math.abs(y1 - y0);
+        const sx = x0 < x1 ? 1 : -1;
+        const sy = y0 < y1 ? 1 : -1;
+        let err = dx - dy;
         
-        // If distance is very small, just draw once with average size
-        if (distance < 0.1) {
-            this.interact(x0, y0, (size0 + size1) / 2);
-            return;
-        }
+        // Calculate total distance for interpolation
+        const totalDistance = Math.sqrt(dx * dx + dy * dy);
+        let currentDistance = 0;
         
-        // Use the smaller of the two sizes to determine spacing
-        const minSize = Math.min(size0, size1);
-        const spacing = Math.max(0.5, minSize * 0.4); // 40% of smaller brush size
-        const steps = Math.ceil(distance / spacing);
+        // Store starting position for distance calculation
+        const startX = x0;
+        const startY = y0;
         
-        // Draw points along the line with interpolated size
-        for (let i = 0; i <= steps; i++) {
-            const t = i / steps;
-            const x = Math.round(x0 + dx * t);
-            const y = Math.round(y0 + dy * t);
+        while (true) {
+            // Calculate interpolation factor (0 to 1)
+            const t = totalDistance > 0 ? currentDistance / totalDistance : 0;
+            
+            // Interpolate size between size0 and size1
             const interpolatedSize = size0 + (size1 - size0) * t;
-            this.interact(x, y, interpolatedSize);
+            
+            // Draw at current position with interpolated size
+            this.interact(x0, y0, interpolatedSize);
+            
+            if (x0 === x1 && y0 === y1) break;
+            
+            const e2 = 2 * err;
+            if (e2 > -dy) {
+                err -= dy;
+                x0 += sx;
+            }
+            if (e2 < dx) {
+                err += dx;
+                y0 += sy;
+            }
+            
+            // Update distance traveled
+            const distX = x0 - startX;
+            const distY = y0 - startY;
+            currentDistance = Math.sqrt(distX * distX + distY * distY);
         }
     }
     
