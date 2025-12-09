@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChromaSand - Physics Engine</title>
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-color: #09090b;
+            --glass-bg: rgba(20, 20, 25, 0.75);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --accent-color: #06b6d4; /* Cyan-500 */
+            --text-color: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --hover-bg: rgba(255, 255, 255, 0.1);
+            --active-bg: rgba(6, 182, 212, 0.15);
+            --danger-color: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* --- Canvas Layer --- */
+        .canvas-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            background-color: var(--bg-color);
+            background-image:
+                linear-gradient(to right, #1f1f23 1px, transparent 1px),
+                linear-gradient(to bottom, #1f1f23 1px, transparent 1px);
+            background-size: 0 0; /* Hidden by default */
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated; 
+            cursor: none; 
+        }
+
+        /* --- UI Layer --- */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none; /* Let clicks pass through to canvas where empty */
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* Glass Panel Mixin Style */
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border-radius: 16px;
+            pointer-events: auto;
+            transition: all 0.2s ease;
+        }
+
+        /* --- Top Bar --- */
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .header-panel {
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        h1 span.version {
+            font-size: 0.7em;
+            color: var(--text-muted);
+            font-weight: 400;
+            text-transform: none;
+            background: rgba(255,255,255,0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .stats-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            gap: 4px;
+        }
+
+        /* --- Controls (Right Top) --- */
+        .actions-panel {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-color);
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            font-size: 1rem;
+        }
+
+        .icon-btn:hover {
+            background: var(--hover-bg);
+        }
+
+        .icon-btn.danger:hover {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger-color);
+        }
+
+        .icon-btn.active {
+            background: var(--active-bg);
+            color: var(--accent-color);
+            border-color: rgba(6, 182, 212, 0.3);
+        }
+
+        /* --- Left Tool Strip --- */
+        .left-panel {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 50px;
+        }
+
+        .tools-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px 0;
+            gap: 8px;
+        }
+
+        .tool-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .tool-btn:hover {
+            color: var(--text-color);
+            background: var(--hover-bg);
+        }
+
+        .tool-btn.active {
+            background: var(--active-bg);
+            color: var(--accent-color);
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+        }
+
+        .tool-separator {
+            width: 20px;
+            height: 1px;
+            background: var(--glass-border);
+            margin: 4px 0;
+        }
+
+        /* Sliders in Left Panel (Vertical-ish logic or Popup) 
+           For simplicity, we'll keep them standard but minimal */
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            padding: 10px 5px;
+        }
+
+        /* Custom Range Input */
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100px; 
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            outline: none;
+            transform: rotate(-90deg); /* Vertical sliders */
+            margin: 40px 0; /* Space for rotation */
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--text-color);
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            background: var(--accent-color);
+        }
+
+        input[type="range"]:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* --- Bottom Dock (Elements) --- */
+        .bottom-dock-container {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            padding-bottom: 10px;
+        }
+
+        .element-dock {
+            display: flex;
+            gap: 8px;
+            padding: 8px 12px;
+            overflow-x: auto;
+            max-width: 100%;
+            scrollbar-width: none; /* Hide scrollbar Firefox */
+        }
+        
+        .element-dock::-webkit-scrollbar {
+            display: none; /* Hide scrollbar Chrome */
+        }
+
+        .element-btn {
+            min-width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid transparent;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            position: relative;
+        }
+
+        .element-btn:hover {
+            background: rgba(255,255,255,0.08);
+            transform: translateY(-4px);
+        }
+
+        .element-btn.active {
+            background: rgba(255,255,255,0.1);
+            border-color: var(--accent-color);
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.15);
+            transform: translateY(-6px);
+        }
+
+        .color-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            margin-bottom: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .element-btn span {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        
+        .element-btn.active span {
+            color: var(--text-color);
+        }
+
+        /* Shortcut keys overlay */
+        .shortcut-key {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: var(--accent-color);
+            color: #000;
+            font-size: 0.6rem;
+            font-weight: 800;
+            padding: 1px 4px;
+            border-radius: 4px;
+            opacity: 0;
+            transform: translateY(5px);
+            transition: all 0.2s;
+            pointer-events: none;
+        }
+
+        body.show-shortcuts .shortcut-key {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* --- Cursor Tooltip --- */
+        .cursor-tooltip {
+            position: fixed;
+            pointer-events: none;
+            z-index: 2000;
+            background: rgba(9, 9, 11, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(8px);
+            padding: 6px 10px;
+            border-radius: 50px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-color);
+            font-size: 0.8rem;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .cursor-tooltip.visible { opacity: 1; }
+        .cursor-tooltip i { color: var(--accent-color); }
+        .cursor-tooltip .mini-color {
+            width: 8px; height: 8px; border-radius: 50%;
+            box-shadow: 0 0 6px currentColor;
+        }
+
+        /* --- Tooltips for Hovering UI --- */
+        [title]:hover::after {
+            content: attr(title);
+            position: absolute;
+            left: 110%; /* For Left Panel */
+            top: 50%;
+            transform: translateY(-50%);
+            background: #000;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            z-index: 100;
+            pointer-events: none;
+        }
+        
+        .actions-panel [title]:hover::after {
+            left: auto; right: 0; top: 110%; transform: none;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="canvas-wrapper" id="canvasWrapper">
+        <canvas id="sandCanvas"></canvas>
+    </div>
+
+    <div class="ui-layer">
+        
+        <!-- Top Bar: Header & Actions -->
+        <div class="top-bar">
+            <div class="glass-panel header-panel">
+                <h1>⚗️ ChromaSand <span class="version">v3.0</span></h1>
+                <div class="stats-panel">
+                    <span>FPS: <span id="fps">60</span></span>
+                    <span id="gridDims" style="opacity:0.6">800x600</span>
+                    <span style="opacity:0.6"><span id="particleCount">0</span> particles</span>
+                </div>
+            </div>
+
+            <div class="glass-panel header-panel actions-panel">
+                <button class="icon-btn" id="btnPause" title="Pause/Play">
+                    <i class="fa-solid fa-pause"></i>
+                </button>
+                <button class="icon-btn" id="btnStep" title="Step Frame">
+                    <i class="fa-solid fa-forward-step"></i>
+                </button>
+                <label class="icon-btn" title="Toggle Grid" style="cursor:pointer">
+                    <input type="checkbox" id="checkGrid" style="display:none">
+                    <i class="fa-solid fa-border-all"></i>
+                </label>
+                <div style="width:1px; height:24px; background:var(--glass-border); margin:0 4px;"></div>
+                <button class="icon-btn danger" id="btnClear" title="Clear All">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Left Tool Strip -->
+        <div class="glass-panel left-panel">
+            <div class="tools-column">
+                <button class="tool-btn active" id="toolBrush" title="Brush (B)">
+                    <i class="fa-solid fa-paintbrush"></i>
+                    <span class="shortcut-key">B</span>
+                </button>
+                <button class="tool-btn" id="toolEraser" title="Eraser (E)">
+                    <i class="fa-solid fa-eraser"></i>
+                    <span class="shortcut-key">E</span>
+                </button>
+                <button class="tool-btn" id="toolFill" title="Fill (G)">
+                    <i class="fa-solid fa-fill-drip"></i>
+                    <span class="shortcut-key">G</span>
+                </button>
+                <button class="tool-btn" id="toolPicker" title="Picker (I)">
+                    <i class="fa-solid fa-eye-dropper"></i>
+                    <span class="shortcut-key">I</span>
+                </button>
+            </div>
+            
+            <div class="tool-separator"></div>
+
+            <div class="slider-group">
+                <div style="height: 100px; display: flex; align-items: center;">
+                    <input type="range" id="brushSize" min="1" max="15" value="3" title="Brush Size [ ]">
+                </div>
+                <i class="fa-solid fa-circle" style="font-size: 0.8rem; opacity: 0.5;"></i>
+                
+                <div style="height: 100px; display: flex; align-items: center;">
+                    <input type="range" id="simScale" min="2" max="10" value="4" title="Grid Scale">
+                </div>
+                <i class="fa-solid fa-expand" style="font-size: 0.8rem; opacity: 0.5;"></i>
+            </div>
+        </div>
+
+        <!-- Bottom Element Dock -->
+        <div class="bottom-dock-container">
+            <div class="glass-panel element-dock" id="elementContainer">
+                <!-- Elements injected by JS -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Floating Cursor Tooltip -->
+    <div id="cursorTooltip" class="cursor-tooltip">
+        <i id="tooltipIcon" class="fa-solid fa-paintbrush"></i>
+        <div id="tooltipColor" class="mini-color"></div>
+        <span id="brushSizeVal" style="font-size:0.7em; opacity:0.7; margin-left:4px">3px</span>
+    </div>
+
+    <script>
+    (function() {
+        // --- Configuration & Constants ---
+        const FPS_LIMIT = 60;
+        let SIM_SCALE = 4;
+        let SPEED_MULT = 1;
+
+        // State Enums 
+        const S = { AIR: 0, SOLID: 1, LIQUID: 2, GAS: 3, FIRE: 4, STATIC: 5 };
+
+        const T = {
+            EMPTY: 0, SAND: 1, WATER: 2, STONE: 3, FIRE: 4, PLANT: 5, SMOKE: 6,
+            STEAM: 7, ACID: 8, OIL: 9, GUNPOWDER: 10, WALL: 11, NANOBOT: 12, WOOD: 13, WOOD_OILED: 14
+        };
+
+        // Tools
+        const TOOL_BRUSH = 0, TOOL_FILL = 1, TOOL_PICKER = 2, TOOL_ERASER = 3;
+
+        const ELEMENTS = {
+            [T.EMPTY]:     { name: 'Eraser', color: [0,0,0], density: 0, state: S.AIR },
+            [T.SAND]:      { name: 'Sand', color: [235, 200, 117], density: 10, state: S.SOLID },
+            [T.WATER]:     { name: 'Water', color: [30, 144, 255], density: 5, state: S.LIQUID },
+            [T.STONE]:     { name: 'Stone', color: [69, 63, 48], density: 100, state: S.STATIC },
+            [T.FIRE]:      { name: 'Fire', color: [255, 69, 0], density: -1, state: S.FIRE },
+            [T.PLANT]:     { name: 'Plant', color: [34, 139, 34], density: 100, state: S.STATIC },
+            [T.SMOKE]:     { name: 'Smoke', color: [80, 80, 80], density: -2, state: S.GAS },
+            [T.STEAM]:     { name: 'Steam', color: [200, 200, 220], density: -1, state: S.GAS },
+            [T.ACID]:      { name: 'Acid', color: [190, 255, 70], density: 6, state: S.LIQUID },
+            [T.OIL]:       { name: 'Oil', color: [139, 69, 19], density: 2, state: S.LIQUID }, 
+            [T.GUNPOWDER]: { name: 'Gunpowder', color: [60, 60, 60], density: 12, state: S.SOLID },
+            [T.WALL]:      { name: 'Wall', color: [50, 50, 50], density: 1000, state: S.STATIC },
+            [T.NANOBOT]:   { name: 'Nano Bot', color: [255, 50, 110], density: 15, state: S.LIQUID },
+            [T.WOOD]:      { name: 'Wood', color: [118, 84, 50], density: 100, state: S.STATIC },
+            [T.WOOD_OILED]:{ name: 'Oiled Wood', color: [74, 59, 42], density: 100, state: S.STATIC }
+        };
+
+        const canvas = document.getElementById('sandCanvas');
+        const ctx = canvas.getContext('2d', { alpha: true });
+        
+        let CANVAS_WIDTH, CANVAS_HEIGHT, count;
+        let cells, variations, life, moved, imgData, data;
+
+        const LUT_DENSITY = new Int8Array(256);
+        const LUT_STATE = new Uint8Array(256);
+        const LUT_COLOR_R = new Uint8Array(256);
+        const LUT_COLOR_G = new Uint8Array(256);
+        const LUT_COLOR_B = new Uint8Array(256);
+        const LUT_GLOW = new Uint8Array(256);
+
+        let rngState = 123456789;
+        let minActiveY = 0;
+
+        let selectedType = T.SAND;
+        let currentTool = TOOL_BRUSH;
+        let brushSize = 3;
+        let isPaused = false;
+        let isMouseDown = false;
+        let mouseX = 0, mouseY = 0;
+        let lastDrawX = null, lastDrawY = null;
+        let lastScreenX = 0, lastScreenY = 0;
+        let showCursor = false;
+        let frameCount = 0;
+        let lastTime = performance.now();
+        let resizeTimeout;
+
+        const elementShortcuts = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
+
+        function fastRand() {
+            let t = rngState ^ (rngState << 13);
+            t ^= t >>> 17;
+            rngState = t ^ (t << 5);
+            return (rngState >>> 0) / 4294967296;
+        }
+
+        function initLUTs() {
+            Object.keys(ELEMENTS).forEach(key => {
+                const id = parseInt(key);
+                const el = ELEMENTS[id];
+                LUT_DENSITY[id] = el.density;
+                LUT_STATE[id] = el.state;
+                LUT_COLOR_R[id] = el.color[0];
+                LUT_COLOR_G[id] = el.color[1];
+                LUT_COLOR_B[id] = el.color[2];
+                LUT_GLOW[id] = (id === T.FIRE || id === T.NANOBOT || id === T.ACID || id === T.WOOD_OILED) ? 1 : 0; 
+            });
+        }
+
+        function initArrays() {
+            count = CANVAS_WIDTH * CANVAS_HEIGHT;
+            cells = new Uint8Array(count); 
+            variations = new Uint8Array(count);
+            life = new Uint16Array(count); 
+            moved = new Uint8Array(count);
+            for (let i = 0; i < count; i++) variations[i] = Math.random() * 20;
+            imgData = ctx.createImageData(CANVAS_WIDTH, CANVAS_HEIGHT);
+            data = new Uint32Array(imgData.data.buffer);
+            document.getElementById('gridDims').textContent = `${CANVAS_WIDTH}x${CANVAS_HEIGHT}`;
+            minActiveY = CANVAS_HEIGHT - 1; 
+        }
+
+        function handleResize() {
+            // Fullscreen resize logic
+            let w = window.innerWidth;
+            let h = window.innerHeight;
+            
+            CANVAS_WIDTH = Math.floor(w / SIM_SCALE);
+            CANVAS_HEIGHT = Math.floor(h / SIM_SCALE);
+            if (CANVAS_WIDTH < 1) CANVAS_WIDTH = 1;
+            if (CANVAS_HEIGHT < 1) CANVAS_HEIGHT = 1;
+
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+            initArrays();
+        }
+
+        function updateToolUI() {
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            const brushInput = document.getElementById('brushSize');
+            
+            if (currentTool === TOOL_BRUSH) {
+                document.getElementById('toolBrush').classList.add('active');
+                brushInput.disabled = false;
+            } else if (currentTool === TOOL_ERASER) {
+                document.getElementById('toolEraser').classList.add('active');
+                brushInput.disabled = false;
+            } else if (currentTool === TOOL_FILL) {
+                document.getElementById('toolFill').classList.add('active');
+                brushInput.disabled = true;
+            } else if (currentTool === TOOL_PICKER) {
+                document.getElementById('toolPicker').classList.add('active');
+                brushInput.disabled = true;
+            }
+            updateTooltipState();
+            updateTooltipPosition();
+        }
+
+        function updateElementUI() {
+            document.querySelectorAll('.element-btn').forEach(b => {
+                b.classList.remove('active');
+                if (parseInt(b.dataset.id) === selectedType) {
+                    b.classList.add('active');
+                }
+            });
+            updateTooltipState();
+        }
+
+        function updateTooltipState() {
+            const iconEl = document.getElementById('tooltipIcon');
+            const colorEl = document.getElementById('tooltipColor');
+            const sizeEl = document.getElementById('brushSizeVal');
+            
+            iconEl.className = 'fa-solid';
+            if (currentTool === TOOL_BRUSH) iconEl.classList.add('fa-paintbrush');
+            else if (currentTool === TOOL_ERASER) iconEl.classList.add('fa-eraser');
+            else if (currentTool === TOOL_FILL) iconEl.classList.add('fa-fill-drip');
+            else if (currentTool === TOOL_PICKER) iconEl.classList.add('fa-eye-dropper');
+
+            if (currentTool === TOOL_BRUSH || currentTool === TOOL_FILL) {
+                colorEl.style.display = 'block';
+                const col = ELEMENTS[selectedType].color;
+                colorEl.style.backgroundColor = `rgb(${col[0]}, ${col[1]}, ${col[2]})`;
+                colorEl.style.boxShadow = `0 0 6px rgb(${col[0]}, ${col[1]}, ${col[2]})`;
+            } else {
+                colorEl.style.display = 'none';
+            }
+
+            if(currentTool === TOOL_BRUSH || currentTool === TOOL_ERASER) {
+                sizeEl.style.display = 'inline';
+                sizeEl.textContent = brushSize + 'px';
+            } else {
+                sizeEl.style.display = 'none';
+            }
+        }
+
+        function updateTooltipPosition() {
+            const tooltip = document.getElementById('cursorTooltip');
+            let offset = 20; 
+            if (currentTool === TOOL_BRUSH || currentTool === TOOL_ERASER) {
+                offset = (brushSize * SIM_SCALE) + 15;
+            }
+            tooltip.style.transform = `translate(${lastScreenX + offset}px, ${lastScreenY + offset}px)`;
+        }
+
+        function init() {
+            initLUTs();
+            handleResize();
+            
+            const container = document.getElementById('elementContainer');
+            container.innerHTML = ''; 
+            
+            let shortcutIndex = 0;
+            Object.keys(ELEMENTS).forEach(key => {
+                const id = parseInt(key);
+                if (id === T.EMPTY || id === T.WALL) return;
+                
+                const el = ELEMENTS[id];
+                const btn = document.createElement('div');
+                btn.className = 'element-btn';
+                btn.dataset.id = id; 
+                if (id === selectedType) btn.classList.add('active');
+                
+                const col = el.color;
+                const colorStr = `rgb(${col[0]}, ${col[1]}, ${col[2]})`;
+                let shortcut = shortcutIndex < elementShortcuts.length ? elementShortcuts[shortcutIndex++] : '';
+
+                btn.innerHTML = `
+                    <div class="color-dot" style="background-color: ${colorStr}; box-shadow: 0 0 5px ${colorStr}"></div>
+                    <span>${el.name}</span>
+                    ${shortcut ? `<span class="shortcut-key">${shortcut}</span>` : ''}
+                `;
+                
+                btn.onclick = () => {
+                    selectedType = id;
+                    updateElementUI();
+                    if (currentTool === TOOL_ERASER || currentTool === TOOL_PICKER) {
+                        currentTool = TOOL_BRUSH;
+                        updateToolUI();
+                    }
+                };
+                container.appendChild(btn);
+            });
+
+            // Handlers
+            const tooltip = document.getElementById('cursorTooltip');
+
+            // Mouse Events
+            const handleMove = (x, y) => {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = CANVAS_WIDTH / rect.width;
+                const scaleY = CANVAS_HEIGHT / rect.height;
+                mouseX = Math.floor((x - rect.left) * scaleX);
+                mouseY = Math.floor((y - rect.top) * scaleY);
+                lastScreenX = x; 
+                lastScreenY = y;
+                updateTooltipPosition();
+            };
+
+            canvas.onmousedown = (e) => { 
+                isMouseDown = true; handleMove(e.clientX, e.clientY); handleToolAction();
+            };
+            window.addEventListener('mousemove', (e) => {
+                if(e.target === canvas) {
+                    showCursor = true;
+                    tooltip.classList.add('visible');
+                    handleMove(e.clientX, e.clientY);
+                } else {
+                    showCursor = false;
+                    tooltip.classList.remove('visible');
+                }
+            });
+            window.addEventListener('mouseup', () => { isMouseDown = false; lastDrawX = null; lastDrawY = null; });
+            
+            // Touch Events
+            canvas.ontouchstart = (e) => { 
+                isMouseDown = true; 
+                const t = e.touches[0];
+                handleMove(t.clientX, t.clientY);
+                e.preventDefault(); 
+                showCursor = true; 
+                tooltip.classList.add('visible');
+                handleToolAction();
+            };
+            canvas.ontouchmove = (e) => { 
+                const t = e.touches[0];
+                handleMove(t.clientX, t.clientY);
+                e.preventDefault(); 
+            };
+            window.ontouchend = () => { 
+                isMouseDown = false; showCursor = false; lastDrawX = null; lastDrawY = null; 
+                tooltip.classList.remove('visible');
+            };
+
+            window.onresize = () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(handleResize, 200);
+            };
+
+            // Keyboard Shortcuts
+            window.addEventListener('keydown', (e) => {
+                const key = e.key.toUpperCase();
+                if (key === 'B') { currentTool = TOOL_BRUSH; updateToolUI(); }
+                else if (key === 'E') { currentTool = TOOL_ERASER; updateToolUI(); }
+                else if (key === 'G') { currentTool = TOOL_FILL; updateToolUI(); }
+                else if (key === 'I') { currentTool = TOOL_PICKER; updateToolUI(); }
+                
+                if (e.key === '[') {
+                    brushSize = Math.max(1, brushSize - 1);
+                    document.getElementById('brushSize').value = brushSize;
+                    updateTooltipState(); updateTooltipPosition();
+                } else if (e.key === ']') {
+                    brushSize = Math.min(15, brushSize + 1);
+                    document.getElementById('brushSize').value = brushSize;
+                    updateTooltipState(); updateTooltipPosition();
+                }
+
+                if (e.key === 'Alt') {
+                    document.body.classList.add('show-shortcuts');
+                    e.preventDefault(); 
+                }
+
+                const sIdx = elementShortcuts.indexOf(e.key);
+                if (sIdx !== -1) {
+                    const ids = Object.keys(ELEMENTS).map(k=>parseInt(k)).filter(id => id !== T.EMPTY && id !== T.WALL);
+                    if (sIdx < ids.length) {
+                        selectedType = ids[sIdx];
+                        updateElementUI();
+                        if (currentTool !== TOOL_FILL) {
+                            currentTool = TOOL_BRUSH;
+                            updateToolUI();
+                        }
+                    }
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (e.key === 'Alt') document.body.classList.remove('show-shortcuts');
+            });
+
+            // UI Actions
+            document.getElementById('toolBrush').onclick = () => { currentTool = TOOL_BRUSH; updateToolUI(); };
+            document.getElementById('toolEraser').onclick = () => { currentTool = TOOL_ERASER; updateToolUI(); };
+            document.getElementById('toolFill').onclick = () => { currentTool = TOOL_FILL; updateToolUI(); };
+            document.getElementById('toolPicker').onclick = () => { currentTool = TOOL_PICKER; updateToolUI(); };
+
+            const brushInput = document.getElementById('brushSize');
+            brushInput.oninput = (e) => {
+                brushSize = parseInt(e.target.value);
+                updateTooltipState(); updateTooltipPosition();
+            };
+
+            const simScaleInput = document.getElementById('simScale');
+            simScaleInput.oninput = (e) => {
+                SIM_SCALE = parseInt(e.target.value);
+                SPEED_MULT = Math.max(1, 10 / SIM_SCALE);
+                const wrapper = document.getElementById('canvasWrapper');
+                if (document.getElementById('checkGrid').checked) {
+                    wrapper.style.backgroundSize = `${SIM_SCALE}px ${SIM_SCALE}px`;
+                }
+                handleResize();
+                updateTooltipPosition();
+            };
+            SPEED_MULT = 10 / SIM_SCALE;
+
+            const checkGrid = document.getElementById('checkGrid');
+            const toggleGrid = () => {
+                const wrapper = document.getElementById('canvasWrapper');
+                const btn = checkGrid.parentElement;
+                if (checkGrid.checked) {
+                    wrapper.style.backgroundSize = `${SIM_SCALE}px ${SIM_SCALE}px`;
+                    btn.classList.add('active');
+                } else {
+                    wrapper.style.backgroundSize = '0 0';
+                    btn.classList.remove('active');
+                }
+            };
+            checkGrid.onchange = toggleGrid;
+
+            const btnPause = document.getElementById('btnPause');
+            btnPause.onclick = (e) => {
+                isPaused = !isPaused;
+                const icon = btnPause.querySelector('i');
+                icon.className = isPaused ? "fa-solid fa-play" : "fa-solid fa-pause";
+                btnPause.classList.toggle('active', isPaused);
+            };
+
+            document.getElementById('btnStep').onclick = () => { if(isPaused) update(); };
+            document.getElementById('btnClear').onclick = () => { cells.fill(T.EMPTY); life.fill(0); minActiveY = CANVAS_HEIGHT - 1; };
+
+            updateToolUI(); 
+            if (window.__sandLoop) cancelAnimationFrame(window.__sandLoop);
+            loop(performance.now());
+        }
+
+        function handleToolAction() {
+            if (currentTool === TOOL_BRUSH || currentTool === TOOL_ERASER) {
+                lastDrawX = mouseX; lastDrawY = mouseY;
+                interact(mouseX, mouseY, brushSize);
+            } else if (currentTool === TOOL_FILL) {
+                floodFill(mouseX, mouseY, selectedType);
+            } else if (currentTool === TOOL_PICKER) {
+                pickElement(mouseX, mouseY);
+            }
+        }
+
+        // --- Physics & Tools ---
+        function getIdx(x, y) { return y * CANVAS_WIDTH + x; }
+
+        function swap(i, j) {
+            const tempType = cells[i]; const tempVar = variations[i]; const tempLife = life[i];
+            cells[i] = cells[j]; variations[i] = variations[j]; life[i] = life[j];
+            cells[j] = tempType; variations[j] = tempVar; life[j] = tempLife;
+            moved[i] = 1; moved[j] = 1;
+        }
+
+        function setType(idx, type) {
+            cells[idx] = type; life[idx] = 0; moved[idx] = 1; 
+            if (type === T.FIRE) life[idx] = 80 + fastRand() * 40;
+            if (type === T.SMOKE) life[idx] = 80 + fastRand() * 40;
+            if (type === T.STEAM) life[idx] = 100;
+            if (type === T.NANOBOT) life[idx] = 60;
+            if (type === T.WOOD) life[idx] = 0; 
+            if (type === T.WOOD_OILED) life[idx] = 0; 
+        }
+
+        function floodFill(x, y, newType) {
+            if (x < 0 || x >= CANVAS_WIDTH || y < 0 || y >= CANVAS_HEIGHT) return;
+            const startIdx = getIdx(x, y);
+            const targetType = cells[startIdx];
+            if (targetType === newType) return;
+            const stack = [startIdx];
+            if (y < minActiveY) minActiveY = 0; 
+            let safety = 0; const maxChecks = count * 2; 
+            while(stack.length && safety < maxChecks) {
+                safety++; const idx = stack.pop();
+                if (cells[idx] !== targetType) continue;
+                setType(idx, newType); variations[idx] = fastRand() * 20;
+                const cx = idx % CANVAS_WIDTH; const cy = Math.floor(idx / CANVAS_WIDTH);
+                if (cy > 0) stack.push(idx - CANVAS_WIDTH); 
+                if (cy < CANVAS_HEIGHT - 1) stack.push(idx + CANVAS_WIDTH); 
+                if (cx > 0) stack.push(idx - 1); 
+                if (cx < CANVAS_WIDTH - 1) stack.push(idx + 1); 
+            }
+        }
+
+        function pickElement(x, y) {
+            if (x < 0 || x >= CANVAS_WIDTH || y < 0 || y >= CANVAS_HEIGHT) return;
+            const idx = getIdx(x, y);
+            const pickedType = cells[idx];
+            if (pickedType === T.EMPTY) { currentTool = TOOL_ERASER; updateToolUI(); } 
+            else { selectedType = pickedType; updateElementUI(); currentTool = TOOL_BRUSH; updateToolUI(); }
+        }
+
+        function interact(x, y, radius) {
+            const interactMinY = Math.max(0, y - radius - 5);
+            if (interactMinY < minActiveY) minActiveY = interactMinY;
+            let typeToDraw = currentTool === TOOL_ERASER ? T.EMPTY : selectedType;
+            const r2 = radius * radius;
+            for (let dy = -radius; dy <= radius; dy++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    if (dx*dx + dy*dy <= r2) {
+                        const nx = x + dx; const ny = y + dy;
+                        if (nx >= 0 && nx < CANVAS_WIDTH && ny >= 0 && ny < CANVAS_HEIGHT) {
+                            const idx = getIdx(nx, ny);
+                            if (currentTool === TOOL_BRUSH && cells[idx] === T.WALL) continue;
+                            if (fastRand() > 0.1) {
+                                cells[idx] = typeToDraw; life[idx] = 0; 
+                                if (typeToDraw === T.FIRE || typeToDraw === T.SMOKE) life[idx] = 100 + fastRand() * 50;
+                                else if (typeToDraw === T.NANOBOT) life[idx] = 60;
+                                variations[idx] = fastRand() * 30; 
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        function drawLine(x0, y0, x1, y1) {
+            const dx = Math.abs(x1 - x0); const dy = Math.abs(y1 - y0);
+            const sx = (x0 < x1) ? 1 : -1; const sy = (y0 < y1) ? 1 : -1;
+            let err = dx - dy;
+            while(true) {
+                interact(x0, y0, brushSize);
+                if (x0 === x1 && y0 === y1) break;
+                const e2 = 2 * err;
+                if (e2 > -dy) { err -= dy; x0 += sx; }
+                if (e2 < dx) { err += dx; y0 += sy; }
+            }
+        }
+
+        function explode(cx, cy, radius) {
+            const interactMinY = Math.max(0, cy - radius - 5);
+            if (interactMinY < minActiveY) minActiveY = interactMinY;
+            const r2 = radius * radius;
+            for (let dy = -radius; dy <= radius; dy++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    if (dx*dx + dy*dy <= r2) {
+                        const nx = cx + dx; const ny = cy + dy;
+                        if (nx >= 0 && nx < CANVAS_WIDTH && ny >= 0 && ny < CANVAS_HEIGHT) {
+                            const idx = getIdx(nx, ny);
+                            if (cells[idx] !== T.WALL) {
+                                if (fastRand() > 0.3) setType(idx, T.FIRE);
+                                else if (fastRand() > 0.5) setType(idx, T.SMOKE);
+                                else setType(idx, T.EMPTY);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function update() {
+            let activeParticles = 0; moved.fill(0); 
+            let newMinActiveY = CANVAS_HEIGHT - 1;
+            const neighborOffsets = [{dx:0,dy:-1},{dx:0,dy:1},{dx:-1,dy:0},{dx:1,dy:0},{dx:-1,dy:-1},{dx:1,dy:-1},{dx:-1,dy:1},{dx:1,dy:1}];
+            if (minActiveY < 0) minActiveY = 0;
+            if (minActiveY >= CANVAS_HEIGHT) minActiveY = CANVAS_HEIGHT - 1;
+            const scanStart = Math.max(0, minActiveY - 20); 
+
+            for (let y = CANVAS_HEIGHT - 1; y >= scanStart; y--) {
+                const coinFlip = (fastRand() * 2) < 1;
+                const startX = coinFlip ? 0 : CANVAS_WIDTH - 1;
+                const endX = coinFlip ? CANVAS_WIDTH : -1;
+                const stepX = coinFlip ? 1 : -1;
+                let rowHasParticles = false;
+
+                for (let x = startX; x !== endX; x += stepX) {
+                    const i = getIdx(x, y);
+                    if (moved[i]) { rowHasParticles = true; continue; }
+                    const type = cells[i];
+                    if (type === T.EMPTY || type === T.WALL) continue;
+                    activeParticles++; rowHasParticles = true;
+                    const state = LUT_STATE[type]; const density = LUT_DENSITY[type];
+                    const below = y + 1 < CANVAS_HEIGHT ? getIdx(x, y + 1) : -1;
+                    const dir = (fastRand() * 2) < 1 ? 1 : -1;
+                    const leftIdx = (x - 1 >= 0) ? getIdx(x - 1, y) : -1;
+                    const rightIdx = (x + 1 < CANVAS_WIDTH) ? getIdx(x + 1, y) : -1;
+                    const downLeft = (y + 1 < CANVAS_HEIGHT && x - 1 >= 0) ? getIdx(x - 1, y + 1) : -1;
+                    const downRight = (y + 1 < CANVAS_HEIGHT && x + 1 < CANVAS_WIDTH) ? getIdx(x + 1, y + 1) : -1;
+                    const up = (y - 1 >= 0) ? getIdx(x, y - 1) : -1;
+
+                    // --- STATIC ---
+                    if (state === S.STATIC) {
+                        if (type === T.WOOD && life[i] > 0) {
+                            let energy = life[i]; life[i] = 0; moved[i] = 1;
+                            if (energy > 2000) energy = 2000;
+                            if (up !== -1 && cells[up] === T.WOOD) {
+                                life[up] += energy; moved[up] = 1; continue;
+                            }
+                            const growthCost = 20;
+                            if (energy > growthCost) {
+                                let grew = false;
+                                if (up !== -1 && LUT_STATE[cells[up]] !== S.SOLID && LUT_STATE[cells[up]] !== S.STATIC && LUT_STATE[cells[up]] !== S.WALL) {
+                                    setType(up, T.WOOD); life[up] = Math.floor((energy - growthCost) * 0.95); moved[up] = 1; grew = true;
+                                    if (energy > 150 && fastRand() < 0.1) {
+                                        const side = fastRand() < 0.5 ? leftIdx : rightIdx;
+                                        const sideUp = side - CANVAS_WIDTH;
+                                        if (sideUp !== -1 && sideUp >= 0 && sideUp < count) {
+                                            const t = cells[sideUp];
+                                            if (LUT_STATE[t] !== S.SOLID && LUT_STATE[t] !== S.STATIC && LUT_STATE[t] !== S.WALL) {
+                                                setType(sideUp, T.WOOD);
+                                                const splitEnergy = Math.floor(life[up] * 0.5);
+                                                life[up] = splitEnergy; life[sideUp] = splitEnergy; moved[sideUp] = 1;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    const candidates = [];
+                                    const upLeft = up - 1; const upRight = up + 1;
+                                    if (leftIdx !== -1 && LUT_STATE[cells[leftIdx]] === S.AIR) candidates.push(leftIdx);
+                                    if (rightIdx !== -1 && LUT_STATE[cells[rightIdx]] === S.AIR) candidates.push(rightIdx);
+                                    if (upLeft > 0 && LUT_STATE[cells[upLeft]] === S.AIR) candidates.push(upLeft);
+                                    if (upRight > 0 && LUT_STATE[cells[upRight]] === S.AIR) candidates.push(upRight);
+                                    if (candidates.length > 0) {
+                                        const target = candidates[Math.floor(fastRand() * candidates.length)];
+                                        setType(target, T.WOOD); life[target] = Math.floor((energy - growthCost) * 0.9); moved[target] = 1; grew = true;
+                                    }
+                                }
+                                if (grew && energy > 400 && fastRand() < 0.05) {
+                                    const side = fastRand() < 0.5 ? leftIdx : rightIdx;
+                                    if (side !== -1 && cells[side] === T.EMPTY) {
+                                        setType(side, T.WOOD); life[side] = 0; moved[side] = 1;
+                                    }
+                                }
+                            }
+                        }
+                        if (type === T.WOOD_OILED && life[i] > 0) {
+                            life[i]--; 
+                            if (fastRand() < 0.1) {
+                                const emitIdx = fastRand() < 0.5 ? up : (fastRand() < 0.5 ? leftIdx : rightIdx);
+                                if (emitIdx !== -1 && cells[emitIdx] === T.EMPTY) setType(emitIdx, T.FIRE);
+                            }
+                            const range = 2;
+                            for (let ry = -range; ry <= range; ry++) {
+                                for (let rx = -range; rx <= range; rx++) {
+                                    if (rx === 0 && ry === 0) continue;
+                                    const nx = x + rx; const ny = y + ry;
+                                    if (nx >= 0 && nx < CANVAS_WIDTH && ny >= 0 && ny < CANVAS_HEIGHT) {
+                                        const nIdx = ny * CANVAS_WIDTH + nx;
+                                        if (cells[nIdx] === T.WOOD_OILED && life[nIdx] === 0) {
+                                            let exposed = false;
+                                            const checkOffsets = [-1, 1, -CANVAS_WIDTH, CANVAS_WIDTH];
+                                            for(let off of checkOffsets) {
+                                                const nb = nIdx + off;
+                                                if (nb >= 0 && nb < count) {
+                                                    const t = cells[nb];
+                                                    if (t === T.EMPTY || t === T.FIRE || t === T.SMOKE) { exposed = true; break; }
+                                                }
+                                            }
+                                            if (exposed) { life[nIdx] = 180 + fastRand() * 120; moved[nIdx] = 1; } 
+                                            else if (Math.abs(rx) <= 1 && Math.abs(ry) <= 1) {
+                                                if (fastRand() < 0.02) { life[nIdx] = 180 + fastRand() * 120; moved[nIdx] = 1; }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if (life[i] <= 0) setType(i, T.FIRE);
+                        }
+                    }
+
+                    if (state === S.SOLID) {
+                        if (type === T.SAND) {
+                            let waterCount = 0; let waterNeighbor = -1;
+                            if (up !== -1 && cells[up] === T.WATER) { waterCount++; waterNeighbor = up; }
+                            if (below !== -1 && cells[below] === T.WATER) { waterCount++; if(fastRand() < 0.5) waterNeighbor = below; }
+                            if (leftIdx !== -1 && cells[leftIdx] === T.WATER) { waterCount++; if(fastRand() < 0.5) waterNeighbor = leftIdx; }
+                            if (rightIdx !== -1 && cells[rightIdx] === T.WATER) { waterCount++; if(fastRand() < 0.5) waterNeighbor = rightIdx; }
+                            if (downLeft !== -1 && cells[downLeft] === T.WATER) { waterCount++; if(fastRand() < 0.5) waterNeighbor = downLeft; }
+                            if (downRight !== -1 && cells[downRight] === T.WATER) { waterCount++; if(fastRand() < 0.5) waterNeighbor = downRight; }
+                            if (waterCount > 0) {
+                                if (fastRand() < (0.002 * waterCount)) {
+                                    setType(i, T.STONE); 
+                                    if (waterNeighbor !== -1) setType(waterNeighbor, T.EMPTY);
+                                    continue; 
+                                }
+                            }
+                        }
+                        const fallSpeed = Math.floor(SPEED_MULT);
+                        let fell = false; let currIdx = i; let currY = y;
+                        for(let f=0; f<fallSpeed; f++) {
+                            const nextY = currY + 1;
+                            if (nextY >= CANVAS_HEIGHT) break;
+                            const belowIdx = getIdx(x, nextY);
+                            const tType = cells[belowIdx]; const tState = LUT_STATE[tType];
+                            if (tState === S.AIR || tState === S.LIQUID || tState === S.GAS || tState === S.FIRE) {
+                                swap(currIdx, belowIdx); currIdx = belowIdx; currY = nextY; fell = true;
+                            } else break;
+                        }
+                        if (!fell) {
+                            const r1 = dir === 1 ? downRight : downLeft;
+                            const r2 = dir === 1 ? downLeft : downRight;
+                            if (r1 !== -1) { const tState = LUT_STATE[cells[r1]]; if (tState !== S.SOLID && tState !== S.STATIC && tState !== S.WALL) { swap(i, r1); continue; } }
+                            if (r2 !== -1) { const tState = LUT_STATE[cells[r2]]; if (tState !== S.SOLID && tState !== S.STATIC && tState !== S.WALL) { swap(i, r2); continue; } }
+                        }
+                    }
+                    else if (state === S.LIQUID) {
+                        if (type === T.NANOBOT) {
+                            let bestCandidates = []; let minNeighbors = 99;
+                            for (let offset of neighborOffsets) {
+                                const nx = x + offset.dx; const ny = y + offset.dy;
+                                if (nx >= 0 && nx < CANVAS_WIDTH && ny >= 0 && ny < CANVAS_HEIGHT) {
+                                    const nIdx = getIdx(nx, ny); const nType = cells[nIdx];
+                                    if (nType !== T.EMPTY && nType !== T.NANOBOT && nType !== T.WALL && nType !== T.FIRE && LUT_STATE[nType] !== S.GAS) {
+                                        let score = 0;
+                                        for (let subOffset of neighborOffsets) {
+                                            const nnx = nx + subOffset.dx; const nny = ny + subOffset.dy;
+                                            if (nnx >= 0 && nnx < CANVAS_WIDTH && nny >= 0 && nny < CANVAS_HEIGHT) {
+                                                const nnType = cells[getIdx(nnx, nny)];
+                                                if (nnType !== T.EMPTY && nnType !== T.NANOBOT && nnType !== T.FIRE && nnType !== T.WALL && LUT_STATE[nnType] !== S.GAS) score++;
+                                            }
+                                        }
+                                        if (score < minNeighbors) { minNeighbors = score; bestCandidates = [nIdx]; } 
+                                        else if (score === minNeighbors) { bestCandidates.push(nIdx); }
+                                    }
+                                }
+                            }
+                            if (bestCandidates.length > 0) {
+                                const target = bestCandidates[Math.floor(fastRand() * bestCandidates.length)];
+                                cells[target] = T.NANOBOT; variations[target] = variations[i]; life[target] = 60; moved[target] = 1;
+                                cells[i] = T.EMPTY; life[i] = 0; moved[i] = 1; continue;
+                            }
+                            life[i]--;
+                            if (life[i] <= 0) {
+                                const radius = fastRand() < 0.1 ? 10 : 3;
+                                explode(x, y, radius); cells[i] = T.EMPTY; continue;
+                            }
+                            const moveSteps = Math.ceil(1 * SPEED_MULT);
+                            let currX = x; let currY = y; let currIdx = i;
+                            for (let s=0; s < moveSteps; s++) {
+                                let rDx = Math.floor(fastRand() * 3) - 1; let rDy = Math.floor(fastRand() * 3) - 1;
+                                if (rDx === 0 && rDy === 0) continue;
+                                let nextX = currX + rDx; let nextY = currY + rDy;
+                                if (nextX >= 0 && nextX < CANVAS_WIDTH && nextY >= 0 && nextY < CANVAS_HEIGHT) {
+                                    const nextIdx = getIdx(nextX, nextY); const nextType = cells[nextIdx];
+                                    if (nextType === T.NANOBOT) {
+                                        rDx = -rDx; rDy = -rDy; nextX = currX + rDx; nextY = currY + rDy;
+                                        if (nextX >= 0 && nextX < CANVAS_WIDTH && nextY >= 0 && nextY < CANVAS_HEIGHT) {
+                                            const bounceIdx = getIdx(nextX, nextY);
+                                            if (cells[bounceIdx] === T.EMPTY) {
+                                                swap(currIdx, bounceIdx); currIdx = bounceIdx; currX = nextX; currY = nextY;
+                                            }
+                                        }
+                                    } else if (nextType === T.EMPTY) {
+                                        swap(currIdx, nextIdx); currIdx = nextIdx; currX = nextX; currY = nextY;
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+
+                        if (type === T.WATER) {
+                            let plantContact = false; let targetIdx = -1;
+                            if (below !== -1 && (cells[below] === T.PLANT || cells[below] === T.WOOD)) { plantContact = true; targetIdx = below; }
+                            else if (leftIdx !== -1 && (cells[leftIdx] === T.PLANT || cells[leftIdx] === T.WOOD)) { plantContact = true; targetIdx = leftIdx; }
+                            else if (rightIdx !== -1 && (cells[rightIdx] === T.PLANT || cells[rightIdx] === T.WOOD)) { plantContact = true; targetIdx = rightIdx; }
+                            if (plantContact) {
+                                let waterMass = 1;
+                                const wNeighbors = [up, leftIdx, rightIdx];
+                                for(let n of wNeighbors) { if(n !== -1 && cells[n] === T.WATER) waterMass++; }
+                                setType(i, T.EMPTY); 
+                                if (cells[targetIdx] === T.PLANT) setType(targetIdx, T.WOOD);
+                                let energyBoost = 100 + (waterMass * 50); 
+                                let currentLife = life[targetIdx];
+                                if (currentLife < 2000) { life[targetIdx] = Math.min(2000, currentLife + energyBoost); moved[targetIdx] = 1; }
+                                continue;
+                            }
+                            if (below !== -1 && (cells[below] === T.STONE || cells[below] === T.SAND)) {
+                                const scanDepth = 5 + Math.floor(fastRand() * 3); 
+                                let hitSand = false; let sandIdx = -1;
+                                for (let d = 1; d <= scanDepth; d++) {
+                                    const ny = y + d; if (ny >= CANVAS_HEIGHT) break;
+                                    const nIdx = getIdx(x, ny); const nType = cells[nIdx];
+                                    if (nType === T.SAND) { hitSand = true; sandIdx = nIdx; break; } 
+                                    else if (nType === T.STONE) { continue; } else { break; }
+                                }
+                                if (hitSand && sandIdx !== -1) {
+                                    if (fastRand() < 0.026) { setType(sandIdx, T.STONE); setType(i, T.EMPTY); moved[i] = 1; moved[sandIdx] = 1; continue; }
+                                }
+                            }
+                        }
+
+                        if (type === T.OIL) {
+                            if (below !== -1 && (cells[below] === T.WOOD || cells[below] === T.WOOD_OILED)) {
+                                const scanDepth = 10 + Math.floor(fastRand() * 11);
+                                let hitWood = false; let targetIdx = -1;
+                                for(let d=1; d<=scanDepth; d++){
+                                    const ny = y + d; if(ny >= CANVAS_HEIGHT) break;
+                                    const nIdx = getIdx(x, ny); const nType = cells[nIdx];
+                                    if(nType === T.WOOD){ hitWood = true; targetIdx = nIdx; break; }
+                                    else if(nType === T.WOOD_OILED) continue; else break;
+                                }
+                                if(hitWood && targetIdx !== -1){
+                                    if(fastRand() < 0.05){ setType(targetIdx, T.WOOD_OILED); setType(i, T.EMPTY); moved[i] = 1; moved[targetIdx] = 1; continue; }
+                                }
+                            }
+                        }
+
+                        let fell = false;
+                        if (type === T.WATER) {
+                            const fallRate = Math.ceil(1.5 * SPEED_MULT);
+                            let currIdx = i; let currY = y;
+                            for (let f = 0; f < fallRate; f++) {
+                                const nextY = currY + 1;
+                                if (nextY < CANVAS_HEIGHT) {
+                                    const belowIdx = getIdx(x, nextY); const target = cells[belowIdx]; const tState = LUT_STATE[target];
+                                    if (tState === S.AIR) { swap(currIdx, belowIdx); currIdx = belowIdx; currY = nextY; fell = true; } 
+                                    else if (tState !== S.SOLID && tState !== S.STATIC && tState !== S.WALL) {
+                                        if (LUT_DENSITY[target] < density) { swap(currIdx, belowIdx); currIdx = belowIdx; currY = nextY; fell = true; } else break;
+                                    } else break;
+                                } else break;
+                            }
+                        } else {
+                            const fallRate = Math.ceil(1 * SPEED_MULT);
+                            let currIdx = i; let currY = y;
+                            for (let f = 0; f < fallRate; f++) {
+                                const nextY = currY + 1;
+                                if (nextY < CANVAS_HEIGHT) {
+                                    const belowIdx = getIdx(x, nextY); const target = cells[belowIdx]; const tState = LUT_STATE[target];
+                                    if (tState === S.AIR) { swap(currIdx, belowIdx); currIdx = belowIdx; currY = nextY; fell = true; } 
+                                    else if (tState !== S.SOLID && tState !== S.STATIC && tState !== S.WALL) {
+                                        if (LUT_DENSITY[target] < density) { swap(currIdx, belowIdx); currIdx = belowIdx; currY = nextY; fell = true; } else break;
+                                    } else break;
+                                } else break;
+                            }
+                        }
+                        if (fell) continue;
+
+                        const r1 = dir === 1 ? rightIdx : leftIdx; const r2 = dir === 1 ? leftIdx : rightIdx;
+                        if (type === T.WATER) {
+                            const flowRate = Math.ceil(2 * SPEED_MULT);
+                            let spread = false; let currX = x; let currIdx = i;
+                            for(let s=0; s<flowRate; s++) {
+                                const nextX = currX + dir;
+                                if (nextX >= 0 && nextX < CANVAS_WIDTH) {
+                                    const nextIdx = getIdx(nextX, y);
+                                    if (cells[nextIdx] === T.EMPTY) { swap(currIdx, nextIdx); currIdx = nextIdx; currX = nextX; spread = true; } else break;
+                                } else break;
+                            }
+                            if (spread) continue;
+                            currX = x; currIdx = i;
+                            for(let s=0; s<flowRate; s++) {
+                                const nextX = currX - dir;
+                                if (nextX >= 0 && nextX < CANVAS_WIDTH) {
+                                    const nextIdx = getIdx(nextX, y);
+                                    if (cells[nextIdx] === T.EMPTY) { swap(currIdx, nextIdx); currIdx = nextIdx; currX = nextX; spread = true; } else break;
+                                } else break;
+                            }
+                            if (spread) continue;
+                        } else {
+                            if (r1 !== -1 && cells[r1] === T.EMPTY) { swap(i, r1); continue; }
+                            else if (r2 !== -1 && cells[r2] === T.EMPTY) { swap(i, r2); continue; }
+                        }
+
+                        if (type === T.ACID) {
+                            const targets = [below, r1, r2, leftIdx, rightIdx];
+                            for (let t of targets) {
+                                if (t !== -1) {
+                                    const tType = cells[t];
+                                    if (tType !== T.EMPTY && tType !== T.ACID && tType !== T.WALL && tType !== T.SMOKE && tType !== T.FIRE) {
+                                        if (fastRand() < 0.05) {
+                                            const s1 = fastRand() < 0.5; const s2 = fastRand() < 0.5;
+                                            setType(t, s1 ? T.SMOKE : T.EMPTY); setType(i, s2 ? T.SMOKE : T.EMPTY);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else if (state === S.GAS) {
+                        const riseRate = Math.ceil(1 * SPEED_MULT);
+                        let rose = false; let currIdx = i; let currY = y;
+                        for(let f=0; f<riseRate; f++) {
+                            const nextY = currY - 1;
+                            if(nextY >= 0) {
+                                const upIdx = getIdx(x, nextY); const target = cells[upIdx]; const tState = LUT_STATE[target];
+                                if (tState === S.AIR || tState === S.LIQUID || (tState === S.GAS && LUT_DENSITY[target] > density)) { 
+                                    swap(currIdx, upIdx); currIdx = upIdx; currY = nextY; rose = true;
+                                } else break;
+                            } else break;
+                        }
+                        if (!rose) {
+                            const r1 = dir === 1 ? rightIdx : leftIdx; const r2 = dir === 1 ? leftIdx : rightIdx;
+                            if (r1 !== -1 && cells[r1] === T.EMPTY) swap(i, r1); 
+                            else if (r2 !== -1 && cells[r2] === T.EMPTY) swap(i, r2);
+                        }
+                        life[i]--;
+                        if (life[i] <= 0) setType(i, (type === T.STEAM && fastRand() < 0.1) ? T.WATER : T.EMPTY);
+                    }
+                    else if (state === S.FIRE) {
+                        const riseRate = Math.ceil(1 * SPEED_MULT);
+                        let rose = false; let currIdx = i; let currY = y;
+                        for(let f=0; f<riseRate; f++) {
+                            const nextY = currY - 1;
+                            if (nextY >= 0) {
+                                const upIdx = getIdx(x, nextY);
+                                if (cells[upIdx] === T.EMPTY) {
+                                    if(fastRand() < 0.5) { swap(currIdx, upIdx); currIdx = upIdx; currY = nextY; rose = true; } else break;
+                                } else break;
+                            } else break;
+                        }
+                        const r1 = dir === 1 ? rightIdx : leftIdx;
+                        if (r1 !== -1 && cells[r1] === T.EMPTY && fastRand() < 0.2) swap(i, r1);
+                        [up, below, leftIdx, rightIdx].forEach(n => {
+                            if (n !== -1) {
+                                const t = cells[n];
+                                if (t === T.PLANT || t === T.OIL || t === T.WOOD) { if(fastRand() < 0.1) setType(n, T.FIRE); } 
+                                else if (t === T.WOOD_OILED) {
+                                    if (life[n] === 0) { life[n] = 180 + fastRand() * 120; moved[n] = 1; }
+                                }
+                                else if (t === T.GUNPOWDER) { explode(x, y, 8); }
+                                else if (t === T.WATER) { setType(i, T.EMPTY); setType(n, T.STEAM); }
+                            }
+                        });
+                        life[i] -= (fastRand() * 2);
+                        if (life[i] <= 0) setType(i, fastRand() < 0.4 ? T.SMOKE : T.EMPTY);
+                    }
+                    else if (type === T.PLANT) {
+                        if (fastRand() < 0.005) {
+                            const growthOpts = [up, leftIdx, rightIdx, below];
+                            const target = growthOpts[Math.floor(fastRand()*growthOpts.length)];
+                            if (target !== -1) {
+                                if (cells[target] === T.WATER) { cells[target] = T.PLANT; moved[target] = 1; } 
+                                else if (cells[target] === T.EMPTY && fastRand() < 0.05) { cells[target] = T.PLANT; moved[target] = 1; }
+                            }
+                        }
+                    }
+                } 
+                if (rowHasParticles && y < newMinActiveY) { newMinActiveY = y; }
+            } 
+            minActiveY = newMinActiveY;
+            document.getElementById('particleCount').textContent = activeParticles;
+        }
+
+        function draw() {
+            for (let i = 0; i < count; i++) {
+                const type = cells[i];
+                if (type === T.EMPTY) { data[i] = 0x00000000; continue; }
+                let r = LUT_COLOR_R[type]; let g = LUT_COLOR_G[type]; let b = LUT_COLOR_B[type];
+                const v = variations[i]; let bloom = 0;
+                if (LUT_GLOW[type]) { const hash = (i + frameCount) & 31; bloom = hash; } 
+                else { const hash = (i + frameCount) & 15; bloom = hash; }
+                if (type === T.FIRE) {
+                    const l = life[i];
+                    if (l > 80) { r=255; g=255; b=100; } else if (l > 40) { r=255; g=100; b=0; } else { r=150; g=10; b=10; } 
+                    r += bloom; g += bloom; b += bloom * 0.5;
+                } else if (type === T.WOOD_OILED && life[i] > 0) {
+                    r = 255; g = 100 + (bloom * 2); b = 50;
+                } else {
+                    r = (r - v) + bloom; g = (g - v) + bloom; b = (b - v) + bloom;
+                }
+                if(r > 255) r = 255; else if(r < 0) r = 0;
+                if(g > 255) g = 255; else if(g < 0) g = 0;
+                if(b > 255) b = 255; else if(b < 0) b = 0;
+                data[i] = (255 << 24) | (b << 16) | (g << 8) | r;
+            }
+            ctx.putImageData(imgData, 0, 0);
+            if (showCursor) {
+                ctx.save();
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.shadowBlur = 4; ctx.shadowColor = 'black';
+                ctx.beginPath();
+                if (currentTool === TOOL_BRUSH || currentTool === TOOL_ERASER) {
+                    ctx.arc(mouseX, mouseY, brushSize, 0, Math.PI * 2);
+                    if (currentTool === TOOL_ERASER) ctx.strokeStyle = '#ff5555';
+                } else {
+                    ctx.arc(mouseX, mouseY, 2, 0, Math.PI * 2);
+                }
+                ctx.stroke(); ctx.restore();
+            }
+        }
+
+        function loop(timestamp) {
+            if (timestamp - lastTime >= 1000 / FPS_LIMIT) {
+                lastTime = timestamp;
+                if (isMouseDown && (currentTool === TOOL_BRUSH || currentTool === TOOL_ERASER)) {
+                    if (lastDrawX !== null && lastDrawY !== null) { drawLine(lastDrawX, lastDrawY, mouseX, mouseY); } 
+                    else { interact(mouseX, mouseY, brushSize); }
+                    lastDrawX = mouseX; lastDrawY = mouseY;
+                }
+                if (!isPaused) update();
+                draw();
+                frameCount++;
+            }
+            window.__sandLoop = requestAnimationFrame(loop);
+        }
+
+        setInterval(() => {
+            const fpsEl = document.getElementById('fps'); if (fpsEl) fpsEl.innerText = frameCount; frameCount = 0;
+        }, 1000);
+
+        init();
+    })();
+    </script>
+</body>
+</html>

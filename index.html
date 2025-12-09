@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Falling Sand Engine</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- FontAwesome for UI Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <!-- Main Simulation Canvas -->
+    <canvas id="sim-canvas"></canvas>
+    
+    <!-- Grid Overlay Canvas -->
+    <canvas id="grid-canvas"></canvas>
+
+    <!-- Custom Cursor Element -->
+    <div id="custom-cursor"></div>
+
+    <!-- UI Layer -->
+    <div id="ui-layer">
+        <!-- Left Toolbar: Tools -->
+        <div id="toolbar-left" class="glass-panel pill-vertical">
+            
+            <!-- Brush Tool -->
+            <div class="tool-wrapper" data-tool="brush">
+                <div class="tool-icon active" title="Brush">
+                    <i class="fa-solid fa-paintbrush"></i>
+                    <span class="shortcut-hint">B</span>
+                </div>
+                <div class="popup-slider">
+                    <input type="range" id="brush-size" min="1" max="50" value="5" orient="vertical">
+                    <div class="size-preview" id="brush-size-preview"></div>
+                </div>
+            </div>
+
+            <!-- Eraser Tool -->
+            <div class="tool-wrapper" data-tool="eraser">
+                <div class="tool-icon" title="Eraser">
+                    <i class="fa-solid fa-eraser"></i>
+                    <span class="shortcut-hint">E</span>
+                </div>
+                <div class="popup-slider">
+                    <input type="range" id="eraser-size" min="1" max="50" value="10" orient="vertical">
+                    <div class="size-preview" id="eraser-size-preview"></div>
+                </div>
+            </div>
+
+            <!-- Fill Tool -->
+            <div class="tool-wrapper" data-tool="fill">
+                <div class="tool-icon" title="Flood Fill">
+                    <i class="fa-solid fa-fill-drip"></i>
+                    <span class="shortcut-hint">F</span>
+                </div>
+            </div>
+
+            <!-- Picker Tool -->
+            <div class="tool-wrapper" data-tool="picker">
+                <div class="tool-icon" title="Color Picker">
+                    <i class="fa-solid fa-eye-dropper"></i>
+                    <span class="shortcut-hint">I</span>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Grid Tool -->
+            <div class="tool-wrapper" data-tool="grid">
+                <div class="tool-icon" title="Toggle Grid">
+                    <i class="fa-solid fa-border-all"></i>
+                    <span class="shortcut-hint">CTRL + G</span>
+                </div>
+                <div class="popup-slider">
+                    <input type="range" id="grid-size" min="2" max="20" value="4" orient="vertical">
+                    <div class="grid-size-preview" id="grid-size-preview"></div>
+                </div>
+            </div>
+
+            <!-- Trash Tool -->
+            <div class="tool-wrapper" data-tool="trash">
+                <div class="tool-icon" title="Clear Canvas">
+                    <i class="fa-solid fa-trash"></i>
+                    <span class="shortcut-hint">D</span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Element Picker Container -->
+        <div id="element-picker-container">
+            <!-- Right Element Bar: Materials -->
+            <div id="elements-right" class="glass-panel pill-vertical">
+                <!-- Scrollable Container -->
+                <div class="elements-scroll">
+                    <div class="element-item active" data-elem="sand">
+                        <div class="elem-dot" style="--elem-color: #f6d7b0;"></div>
+                        <span class="elem-label">Sand</span>
+                    </div>
+                    <div class="element-item" data-elem="gravel">
+                        <div class="elem-dot" style="--elem-color: #5f5c52;"></div>
+                        <span class="elem-label">Gravel</span>
+                    </div>
+                    <div class="element-item" data-elem="water">
+                        <div class="elem-dot" style="--elem-color: #4fa4b8;"></div>
+                        <span class="elem-label">Water</span>
+                    </div>
+                    <div class="element-item" data-elem="stone">
+                        <div class="elem-dot" style="--elem-color: #524f45;"></div>
+                        <span class="elem-label">Stone</span>
+                    </div>
+                    <div class="element-item" data-elem="wood">
+                        <div class="elem-dot" style="--elem-color: #8b5a2b;"></div>
+                        <span class="elem-label">Wood</span>
+                    </div>
+                    <div class="element-item" data-elem="fire">
+                        <div class="elem-dot" style="--elem-color: #ff4500; box-shadow: 0 0 8px #ff4500;"></div>
+                        <span class="elem-label">Fire</span>
+                    </div>
+                    <div class="element-item" data-elem="smoke">
+                        <div class="elem-dot" style="--elem-color: #888888;"></div>
+                        <span class="elem-label">Smoke</span>
+                    </div>
+                    <div class="element-item" data-elem="steam">
+                        <div class="elem-dot" style="--elem-color: #e6e6fa;"></div>
+                        <span class="elem-label">Steam</span>
+                    </div>
+                    <div class="element-item" data-elem="acid">
+                        <div class="elem-dot" style="--elem-color: #32cd32;"></div>
+                        <span class="elem-label">Acid</span>
+                    </div>
+                    <div class="element-item" data-elem="oil">
+                        <div class="elem-dot" style="--elem-color: #333333;"></div>
+                        <span class="elem-label">Oil</span>
+                    </div>
+                    <div class="element-item" data-elem="wood-oiled">
+                        <div class="elem-dot" style="--elem-color: #4a3b2a;"></div>
+                        <span class="elem-label">Oiled Wood</span>
+                    </div>
+                    <div class="element-item" data-elem="lava">
+                        <div class="elem-dot" style="--elem-color: #ff6400;"></div>
+                        <span class="elem-label">Lava</span>
+                    </div>
+                    <div class="element-item" data-elem="ash">
+                        <div class="elem-dot" style="--elem-color: #a0a0a0;"></div>
+                        <span class="elem-label">Ash</span>
+                    </div>
+                    <div class="element-item" data-elem="nanobot">
+                        <div class="elem-dot" style="--elem-color: #ff326e; box-shadow: 0 0 8px #ff326e;"></div>
+                        <span class="elem-label">Nano Bot</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Element Expander Button -->
+            <div id="element-expander" class="expander-btn glass-panel" title="Expand Elements">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="7" height="7" x="3" y="3" rx="1"/>
+                    <rect width="7" height="7" x="14" y="3" rx="1"/>
+                    <rect width="7" height="7" x="14" y="14" rx="1"/>
+                    <rect width="7" height="7" x="3" y="14" rx="1"/>
+                </svg>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Element Expander Popup -->
+    <div id="element-popup" class="element-popup hidden">
+        <div class="popup-header">
+            <h3>Elements</h3>
+            <button class="popup-close" id="popup-close">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        
+        <!-- Category Tabs -->
+        <div class="popup-tabs">
+            <button class="tab-btn active" data-category="all">All</button>
+            <button class="tab-btn" data-category="powder">Powder</button>
+            <button class="tab-btn" data-category="liquid">Liquid</button>
+            <button class="tab-btn" data-category="gas">Gas</button>
+            <button class="tab-btn" data-category="static">Static</button>
+            <button class="tab-btn" data-category="special">Special</button>
+        </div>
+        
+        <!-- Element Grid -->
+        <div class="popup-content">
+            <div class="element-grid" id="element-grid">
+                <!-- Elements will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <div id="status-pill" class="status-pill">
+        <div id="status-tool-icon" class="status-icon"></div>
+        <div id="status-element-dot" class="elem-dot"></div>
+        <span id="status-size" class="status-size"></span>
+    </div>
+
+    <!-- Bottom Control Bar -->
+    <div id="control-bar" class="glass-panel pill-horizontal">
+        <div class="control-btn" id="step-backward" title="Previous Frame">
+            <i class="fas fa-step-backward"></i>
+            <span class="shortcut-hint control-hint">LEFT</span>
+        </div>
+        <div class="control-btn" id="play-pause" title="Pause/Play">
+            <i class="fas fa-pause"></i>
+            <span class="shortcut-hint control-hint">SPACE</span>
+        </div>
+        <div class="control-btn" id="step-forward" title="Next Frame">
+            <i class="fas fa-step-forward"></i>
+            <span class="shortcut-hint control-hint">RIGHT</span>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>
