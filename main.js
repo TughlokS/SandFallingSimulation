@@ -206,6 +206,11 @@ class Game {
         this.continuousDrawEnabled = false;
         this.continuousDrawDelay = 100; // milliseconds to hold before enabling continuous draw
         
+        // Drag detection for immediate continuous draw
+        this.mouseDownX = 0;
+        this.mouseDownY = 0;
+        this.dragThreshold = 3; // pixels to move before enabling continuous draw
+        
         // Shift-click line drawing state
         this.lastClickX = null;
         this.lastClickY = null;
@@ -324,15 +329,60 @@ class Game {
     setupUI() {
         // --- Tool Selection ---
         document.querySelectorAll('.tool-wrapper').forEach(wrapper => {
+            const tool = wrapper.dataset.tool;
+            
+            // Special handling for trash tool - use mousedown/mouseup for hold mechanism
+            if (tool === 'trash') {
+                wrapper.addEventListener('mousedown', (e) => {
+                    // Prevent triggering if clicking the slider itself
+                    if (e.target.tagName === 'INPUT') return;
+                    
+                    // Start the same hold mechanism as D key
+                    if (!this.clearHoldStart) {
+                        this.clearHoldStart = Date.now();
+                        const trashIcon = wrapper.querySelector('.tool-icon');
+                        
+                        // Start smooth progress animation with requestAnimationFrame (reuse same logic as D key)
+                        const animateProgress = () => {
+                            const holdTime = Date.now() - this.clearHoldStart;
+                            const progress = Math.min(holdTime / 500, 1); // 0 to 1 over 0.5 seconds
+                            
+                            // Update visual progress
+                            trashIcon.style.setProperty('--clear-progress', progress);
+                            trashIcon.classList.add('clearing');
+                            
+                            // Clear canvas after 0.5 seconds
+                            if (progress >= 1) {
+                                this.clearCanvas();
+                                this.resetClearProgress();
+                            } else {
+                                // Continue animation
+                                this.clearHoldAnimationId = requestAnimationFrame(animateProgress);
+                            }
+                        };
+                        
+                        this.clearHoldAnimationId = requestAnimationFrame(animateProgress);
+                    }
+                });
+                
+                // Handle mouseup/mouseleave to cancel if released early
+                const cancelClearHold = () => {
+                    if (this.clearHoldStart) {
+                        this.resetClearProgress();
+                    }
+                };
+                
+                wrapper.addEventListener('mouseup', cancelClearHold);
+                wrapper.addEventListener('mouseleave', cancelClearHold);
+                
+                return; // Skip the regular click handler for trash
+            }
+            
+            // Regular click handler for other tools
             wrapper.addEventListener('click', (e) => {
                 // Prevent triggering if clicking the slider itself
                 if (e.target.tagName === 'INPUT') return;
 
-                const tool = wrapper.dataset.tool;
-                if (tool === 'trash') {
-                    this.clearCanvas();
-                    return;
-                }
                 if (tool === 'grid') {
                     this.toggleGrid();
                     return;
@@ -777,7 +827,7 @@ class Game {
         
         // Track D key hold for clear canvas
         this.clearHoldStart = null;
-        this.clearHoldInterval = null;
+        this.clearHoldAnimationId = null;
         
         window.addEventListener('keydown', (e) => {
             // Spacebar: Pause/Play
@@ -837,8 +887,8 @@ class Game {
                     this.clearHoldStart = Date.now();
                     const trashIcon = document.querySelector('.tool-wrapper[data-tool="trash"] .tool-icon');
                     
-                    // Start progress animation
-                    this.clearHoldInterval = setInterval(() => {
+                    // Start smooth progress animation with requestAnimationFrame
+                    const animateProgress = () => {
                         const holdTime = Date.now() - this.clearHoldStart;
                         const progress = Math.min(holdTime / 500, 1); // 0 to 1 over 0.5 seconds
                         
@@ -850,8 +900,13 @@ class Game {
                         if (progress >= 1) {
                             this.clearCanvas();
                             this.resetClearProgress();
+                        } else {
+                            // Continue animation
+                            this.clearHoldAnimationId = requestAnimationFrame(animateProgress);
                         }
-                    }, 16); // ~60fps
+                    };
+                    
+                    this.clearHoldAnimationId = requestAnimationFrame(animateProgress);
                 }
             }
             // Ctrl+G: Toggle Grid
@@ -954,15 +1009,9 @@ class Game {
             this.isMouseDown = true;
             this.mouseDownTime = performance.now();
             this.continuousDrawEnabled = false; // Start disabled
+            this.mouseDownX = e.clientX;
+            this.mouseDownY = e.clientY;
             this.updateMousePosition(e);
-            
-            // Initialize shift-drag if shift is held
-            if (e.shiftKey && (this.activeTool === 'brush' || this.activeTool === 'eraser')) {
-                this.shiftDragActive = true;
-                this.shiftDragAxis = null; // Will be determined on first move
-                this.shiftDragStartX = this.mouseX;
-                this.shiftDragStartY = this.mouseY;
-            }
             
             // Save action state for undo/redo (for brush/eraser)
             if (!this.isRestoringAction && (this.activeTool === 'brush' || this.activeTool === 'eraser')) {
@@ -980,13 +1029,31 @@ class Game {
         this.canvas.addEventListener('mousemove', (e) => {
             this.updateMousePosition(e);
             
-            // Activate shift-drag if shift is pressed during an active drag
+            // Check if user started dragging - enable continuous draw immediately
+            if (this.isMouseDown && !this.continuousDrawEnabled && 
+                (this.activeTool === 'brush' || this.activeTool === 'eraser')) {
+                const dx = e.clientX - this.mouseDownX;
+                const dy = e.clientY - this.mouseDownY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance >= this.dragThreshold) {
+                    this.continuousDrawEnabled = true;
+                }
+            }
+            
+            // Activate shift-drag if shift is pressed and mouse has moved beyond dragThreshold
             if (e.shiftKey && this.isMouseDown && !this.shiftDragActive && 
                 (this.activeTool === 'brush' || this.activeTool === 'eraser')) {
-                this.shiftDragActive = true;
-                this.shiftDragAxis = null; // Will be determined on next move
-                this.shiftDragStartX = this.lastDrawX !== null ? this.lastDrawX : this.mouseX;
-                this.shiftDragStartY = this.lastDrawY !== null ? this.lastDrawY : this.mouseY;
+                const dx = e.clientX - this.mouseDownX;
+                const dy = e.clientY - this.mouseDownY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance >= this.dragThreshold) {
+                    this.shiftDragActive = true;
+                    this.shiftDragAxis = null; // Will be determined on next move
+                    this.shiftDragStartX = this.lastDrawX !== null ? this.lastDrawX : this.mouseX;
+                    this.shiftDragStartY = this.lastDrawY !== null ? this.lastDrawY : this.mouseY;
+                }
             }
             
             // Handle shift-drag axis constraint
@@ -1001,12 +1068,18 @@ class Game {
             this.updateCursorPosition(e);
         });
         
-        window.addEventListener('mouseup', () => {
+        window.addEventListener('mouseup', (e) => {
             // If mouse was released before continuous draw enabled, draw once
+            // OR if shift is held (for shift-click line drawing)
             if (this.isMouseDown && !this.continuousDrawEnabled && 
                 (this.activeTool === 'brush' || this.activeTool === 'eraser')) {
                 // This was a quick click - draw once at release
-                this.handleToolAction({ clientX: this.mouseX, clientY: this.mouseY });
+                this.handleToolAction(e);
+            } else if (this.isMouseDown && e.shiftKey && 
+                !this.shiftDragActive &&
+                (this.activeTool === 'brush' || this.activeTool === 'eraser')) {
+                // Shift-click line drawing - handle only if shift-drag was not active
+                this.handleToolAction(e);
             }
             
             this.isMouseDown = false;
@@ -1048,15 +1121,9 @@ class Game {
             this.mouseDownTime = performance.now();
             this.continuousDrawEnabled = false; // Start disabled
             const touch = e.touches[0];
+            this.mouseDownX = touch.clientX;
+            this.mouseDownY = touch.clientY;
             this.updateMousePosition(touch);
-            
-            // Initialize shift-drag if shift is held (for touch with keyboard)
-            if (e.shiftKey && (this.activeTool === 'brush' || this.activeTool === 'eraser')) {
-                this.shiftDragActive = true;
-                this.shiftDragAxis = null;
-                this.shiftDragStartX = this.mouseX;
-                this.shiftDragStartY = this.mouseY;
-            }
             
             // Save action state for undo/redo (for brush/eraser)
             if (!this.isRestoringAction && (this.activeTool === 'brush' || this.activeTool === 'eraser')) {
@@ -1076,13 +1143,31 @@ class Game {
             const touch = e.touches[0];
             this.updateMousePosition(touch);
             
-            // Activate shift-drag if shift is pressed during an active drag
+            // Check if user started dragging - enable continuous draw immediately
+            if (this.isMouseDown && !this.continuousDrawEnabled && 
+                (this.activeTool === 'brush' || this.activeTool === 'eraser')) {
+                const dx = touch.clientX - this.mouseDownX;
+                const dy = touch.clientY - this.mouseDownY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance >= this.dragThreshold) {
+                    this.continuousDrawEnabled = true;
+                }
+            }
+            
+            // Activate shift-drag if shift is pressed and touch has moved beyond dragThreshold
             if (e.shiftKey && this.isMouseDown && !this.shiftDragActive && 
                 (this.activeTool === 'brush' || this.activeTool === 'eraser')) {
-                this.shiftDragActive = true;
-                this.shiftDragAxis = null;
-                this.shiftDragStartX = this.lastDrawX !== null ? this.lastDrawX : this.mouseX;
-                this.shiftDragStartY = this.lastDrawY !== null ? this.lastDrawY : this.mouseY;
+                const dx = touch.clientX - this.mouseDownX;
+                const dy = touch.clientY - this.mouseDownY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance >= this.dragThreshold) {
+                    this.shiftDragActive = true;
+                    this.shiftDragAxis = null;
+                    this.shiftDragStartX = this.lastDrawX !== null ? this.lastDrawX : this.mouseX;
+                    this.shiftDragStartY = this.lastDrawY !== null ? this.lastDrawY : this.mouseY;
+                }
             }
             
             // Handle shift-drag axis constraint for touch
@@ -1094,12 +1179,13 @@ class Game {
             }
         });
         
-        this.canvas.addEventListener('touchend', () => {
+        this.canvas.addEventListener('touchend', (e) => {
             // If touch was released before continuous draw enabled, draw once
             if (this.isMouseDown && !this.continuousDrawEnabled && 
                 (this.activeTool === 'brush' || this.activeTool === 'eraser')) {
                 // This was a quick tap - draw once at release
-                this.handleToolAction({ clientX: this.mouseX, clientY: this.mouseY });
+                // Touch events don't have shiftKey, so we check keyboard state
+                this.handleToolAction({ clientX: this.mouseX, clientY: this.mouseY, shiftKey: e.shiftKey || false });
             }
             
             this.isMouseDown = false;
@@ -1630,10 +1716,10 @@ class Game {
     }
     
     resetClearProgress() {
-        // Stop clear interval
-        if (this.clearHoldInterval) {
-            clearInterval(this.clearHoldInterval);
-            this.clearHoldInterval = null;
+        // Stop clear animation
+        if (this.clearHoldAnimationId) {
+            cancelAnimationFrame(this.clearHoldAnimationId);
+            this.clearHoldAnimationId = null;
         }
         
         // Reset hold start time
@@ -3814,8 +3900,17 @@ class Game {
                         const idx = this.getIdx(nx, ny);
                         
                         // Don't let fire overwrite stone or gravel (both are fireproof)
+                        // But allow fire to heat lava when drawn over it
                         if (this.activeTool === 'brush' && typeToDraw === TYPE.FIRE && 
                             (this.cells[idx] === TYPE.STONE || this.cells[idx] === TYPE.GRAVEL)) {
+                            continue;
+                        }
+                        
+                        // Special case: fire drawn over lava adds heat instead of replacing it
+                        if (this.activeTool === 'brush' && typeToDraw === TYPE.FIRE && 
+                            this.cells[idx] === TYPE.LAVA) {
+                            // Add significant heat to lava (max 1500)
+                            this.life[idx] = Math.min(1500, this.life[idx] + 200);
                             continue;
                         }
                         
